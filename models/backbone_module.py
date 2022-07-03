@@ -82,89 +82,78 @@ class KPBackboneFullyConv(nn.Module):
             e.g. 3 for RGB, 1 for height.
     """
 
-    def __init__(self, norm_2d=False, n_rot=24, FLAGS=None):
+    def __init__(self, FLAGS=None):
         super().__init__()
-        self.n_rot = n_rot
         self.FLAGS = FLAGS
-        self.mask_net = MaskNet(in_dim=64, FLAGS=FLAGS)
-        self.rot_attn_net = RotAttnNet(in_dim=64, FLAGS=FLAGS, n_cls=10 + 1)
-        self.extract_canonical_feature = extract_canonical_feature
-
-        self.sa1 = KPE2ModuleVotes(npoint=2048,
+        self.sa1 = KPModuleVotes(npoint=2048,
                             radius=0.2,
                             nsample=64,
                             in_dim=1,
                             out_dim=32,
-                            norm_2d=norm_2d, n_rot=self.n_rot,
                             is_first_layer=True, )
 
-        self.sa2 = KPE2ModuleVotes(npoint=1024,
+        self.sa2 = KPModuleVotes(npoint=1024,
                             radius=0.4,
                             nsample=32,
                             in_dim=32,
                             out_dim=32,
-                            norm_2d=norm_2d, n_rot=self.n_rot,
                             )
 
-        self.sa3 = KPE2ModuleVotes(npoint=512,
+        self.sa3 = KPModuleVotes(npoint=512,
                             radius=0.8,
                             nsample=16,
                             in_dim=32,
                             out_dim=64,
-                            norm_2d=norm_2d, n_rot=self.n_rot,
                             )
 
-        self.sa4 = KPE2ModuleVotes(npoint=256,
+        self.sa4 = KPModuleVotes(npoint=256,
                             radius=1.2,
                             nsample=16,
                             in_dim=64,
                             out_dim=64,
-                            norm_2d=norm_2d, n_rot=self.n_rot,
                             )
 
-        self.sa5 = KPE2ModuleVotes(npoint=128,
+        self.sa5 = KPModuleVotes(npoint=128,
                             radius=1.5,
                             nsample=12,
                             in_dim=64,
                             out_dim=64,
-                            norm_2d=norm_2d, n_rot=self.n_rot,
                             )
 
-        self.sa6 = KPE2ModuleVotes(npoint=64,
+        self.sa6 = KPModuleVotes(npoint=64,
                             radius=1.8,
                             nsample=12,
                             in_dim=64,
                             out_dim=128,
-                            norm_2d=norm_2d, n_rot=self.n_rot,
                             )
 
-        self.fp1 = KPE2ModuleVotes(npoint=128,
+        self.fp1 = KPModuleVotes(npoint=128,
                             radius=1.5,
                             nsample=12,
                             in_dim=(64 + 128),
                             out_dim=64,
-                            norm_2d=norm_2d, n_rot=self.n_rot, no_downsample=True,
+                            no_downsample=True,
                             )
-        self.fp2 = KPE2ModuleVotes(npoint=256,
+        self.fp2 = KPModuleVotes(npoint=256,
                             radius=1.2,
                             nsample=16,
                             in_dim=(64 + 64),
                             out_dim=64,
-                            norm_2d=norm_2d, n_rot=self.n_rot, no_downsample=True,
+                            no_downsample=True,
                             )
-        self.fp3 = KPE2ModuleVotes(npoint=512,
+        self.fp3 = KPModuleVotes(npoint=512,
                             radius=0.8,
                             nsample=16,
                             in_dim=(64 + 64),
                             out_dim=64,
-                            norm_2d=norm_2d, n_rot=self.n_rot, no_downsample=True,
+                            no_downsample=True,
                             )
-        self.fp4 = KPE2ModuleVotes(npoint=1024,
+        self.fp4 = KPModuleVotes(npoint=1024,
                             radius=0.4,
                             nsample=32,
                             in_dim=(32 + 64),
                             out_dim=64,
-                            norm_2d=norm_2d, n_rot=self.n_rot, no_downsample=True,
+                            no_downsample=True,
                             )
         print(self)
 
@@ -233,58 +222,30 @@ class KPBackboneFullyConv(nn.Module):
         skipped_feature = end_points['sa5_features']
         forward_feature = end_points['sa6_features']
         skipped_xyz = end_points['sa5_xyz']
-        forward_feature = construct_feature_orbit(forward_feature, self.n_rot)
-        skipped_feature = construct_feature_orbit(skipped_feature, self.n_rot)
-        interpolated_feats = upsample_eqv_point_features(skipped_xyz, end_points['sa6_xyz'], forward_feature)
+        interpolated_feats = upsample_point_features(skipped_xyz, end_points['sa6_xyz'], forward_feature)
         cat_feats = torch.cat([interpolated_feats, skipped_feature], dim=1)
         _, features, _, bq_idx = self.fp1(skipped_xyz, cat_feats)
 
         skipped_feature = end_points['sa4_features']
         forward_feature = features
         skipped_xyz = end_points['sa4_xyz']
-        forward_feature = construct_feature_orbit(forward_feature, self.n_rot)
-        skipped_feature = construct_feature_orbit(skipped_feature, self.n_rot)
-        interpolated_feats = upsample_eqv_point_features(skipped_xyz, end_points['sa5_xyz'], forward_feature)
+        interpolated_feats = upsample_point_features(skipped_xyz, end_points['sa5_xyz'], forward_feature)
         cat_feats = torch.cat([interpolated_feats, skipped_feature], dim=1)
         _, features, _, bq_idx = self.fp2(skipped_xyz, cat_feats)
 
         skipped_feature = end_points['sa3_features']
         forward_feature = features
         skipped_xyz = end_points['sa3_xyz']
-        forward_feature = construct_feature_orbit(forward_feature, self.n_rot)
-        skipped_feature = construct_feature_orbit(skipped_feature, self.n_rot)
-        interpolated_feats = upsample_eqv_point_features(skipped_xyz, end_points['sa4_xyz'], forward_feature)
+        interpolated_feats = upsample_point_features(skipped_xyz, end_points['sa4_xyz'], forward_feature)
         cat_feats = torch.cat([interpolated_feats, skipped_feature], dim=1)
         _, features, _, bq_idx = self.fp3(skipped_xyz, cat_feats)
 
         skipped_feature = end_points['sa2_features']
         forward_feature = features
         skipped_xyz = end_points['sa2_xyz']
-        forward_feature = construct_feature_orbit(forward_feature, self.n_rot)
-        skipped_feature = construct_feature_orbit(skipped_feature, self.n_rot)
-        interpolated_feats = upsample_eqv_point_features(skipped_xyz, end_points['sa3_xyz'], forward_feature)
+        interpolated_feats = upsample_point_features(skipped_xyz, end_points['sa3_xyz'], forward_feature)
         cat_feats = torch.cat([interpolated_feats, skipped_feature], dim=1)
         _, features, _, bq_idx = self.fp4(skipped_xyz, cat_feats)
-
-        features_ = features  # [B, C, Nr, Np]
-        seed_mask_logits, seed_mask_pred = self.mask_net(features_)
-        point_cls_logits, point_cls_pred, point_rot_logits = self.rot_attn_net(features_)
-        fg_mask = seed_mask_pred
-        end_points['seed_mask_logits'] = seed_mask_logits
-        end_points['seed_mask_pred'] = seed_mask_pred
-        end_points['point_cls_logits'] = point_cls_logits
-        end_points['point_cls_pred'] = point_cls_pred
-        end_points['point_pose_logits'] = point_rot_logits  # [B, Nr, Np]
-        end_points['point_pose_pred'] = point_rot_logits.argmax(dim=1)  # [B, Np]
-
-        pose_for_selection = end_points['point_pose_pred']
-        features_selected = self.extract_canonical_feature(features, pose_for_selection, fg_mask=torch.ones_like(fg_mask))
-
-        features_pooled = self.extract_canonical_feature(features, pose_for_selection, fg_mask=torch.zeros_like(fg_mask))
-        blending_weights = torch.softmax(seed_mask_logits, dim=2)  # [B, Np, 2]
-        bg_weights = blending_weights[..., 0]
-        fg_weights = blending_weights[..., 1]  # [B, Np]
-        features = features_selected * fg_weights[:, None, :] + features_pooled * bg_weights[:, None, :]
 
         # print('after final shape:{}, {}'.format(end_points['sa2_xyz'].shape, features.shape))
         end_points['seed_features'] = features

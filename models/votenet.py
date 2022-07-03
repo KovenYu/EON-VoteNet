@@ -41,12 +41,11 @@ class VoteNet(nn.Module):
             Number of votes generated from each seed point.
     """
 
-    def __init__(self, num_class, num_heading_bin, num_size_cluster, mean_size_arr, n_rot=24,
-        input_feature_dim=0, num_proposal=128, vote_factor=1, sampling='vote_fps', norm_2d=False, FLAGS=None):
+    def __init__(self, num_class, num_heading_bin, num_size_cluster, mean_size_arr,
+        input_feature_dim=0, num_proposal=128, vote_factor=1, sampling='vote_fps', FLAGS=None):
         super().__init__()
 
         self.num_class = num_class
-        self.n_rot = n_rot
         self.FLAGS = FLAGS
         self.num_heading_bin = num_heading_bin
         self.num_size_cluster = num_size_cluster
@@ -58,8 +57,7 @@ class VoteNet(nn.Module):
         self.sampling=sampling
 
         # Backbone point feature learning
-        self.backbone_net = KPBackboneFullyConv(norm_2d=norm_2d, n_rot=n_rot,
-                                                FLAGS=FLAGS)
+        self.backbone_net = KPBackboneFullyConv(FLAGS=FLAGS)
 
         # Hough voting
         self.vgen = VotingModule(self.vote_factor, seed_feature_dim=64)
@@ -90,12 +88,7 @@ class VoteNet(nn.Module):
         xyz = end_points['seed_xyz']  # [B, Np, 3]
         features = end_points['seed_features']  # [B, C, Np]
 
-        seed_rot_pred = pc_util.class2angle(end_points['point_pose_pred'].float(), 0, self.n_rot)
-        seed_mask = end_points['seed_mask_pred']
-        seed_rot_pred[~ seed_mask] = 0  # BG pose not defined, so you don't want it to rotate bg vote
-        end_points['point_pose_pred_angle'] = seed_rot_pred
-        vote_rotate = seed_rot_pred
-        xyz, features = self.vgen(xyz, features, vote_rotate)
+        xyz, features = self.vgen(xyz, features)
         features_norm = torch.norm(features, p=2, dim=1)
         features = features.div(features_norm.unsqueeze(1))
         end_points['vote_xyz'] = xyz

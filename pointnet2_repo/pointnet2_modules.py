@@ -72,7 +72,7 @@ class PointnetSAModuleVotes(nn.Module):
         self.mlp_module = pt_utils.SharedMLP(mlp_spec, bn=bn)
 
     def forward(self, xyz: torch.Tensor,
-                features, point_pose, point_pose_mask):
+                features):
         r"""
         Parameters
         ----------
@@ -80,8 +80,6 @@ class PointnetSAModuleVotes(nn.Module):
             (B, N, 3) tensor of the xyz coordinates of the features, in world space
         features : torch.Tensor
             (B, C, N) tensor of the descriptors of the the features, in canonical space
-        point_pose: [B, N] back-rotate xyz for each cluster, before feeding to pointNet
-        point_pose_mask: [B, N] where 1 means FG, 0 means BG
 
         Returns
         -------
@@ -91,7 +89,6 @@ class PointnetSAModuleVotes(nn.Module):
             (B, \sum_k(mlps[k][-1]), npoint) tensor of the new_features descriptors, in canonical space
         inds: torch.Tensor
             (B, npoint) tensor of the inds
-        mode_pose: [B, Np], mode pose of each cluster
         """
         B, N, _ = xyz.shape
         # batch_indictor = torch.arange(B)[..., None].expand([-1, N]).clone().cuda().flatten()  # [B*N]
@@ -106,10 +103,8 @@ class PointnetSAModuleVotes(nn.Module):
         inds_ = inds[..., None].expand([-1, -1, 3]).clone()  # [B, Np, 3]
         new_xyz = xyz.gather(1, inds_)
 
-        grouped_features, mode_pose = self.grouper(
-            xyz, new_xyz, features, point_pose, point_pose_mask)
-        # grouped_features: (B, C, Np, Nnb) where Nnb is padded by 0, and first 3-dim is back-rotated by mode_pose
-        # mode_pose: [B, Np]
+        grouped_features = self.grouper(
+            xyz, new_xyz, features)
 
         new_features = self.mlp_module(
             grouped_features
@@ -119,7 +114,7 @@ class PointnetSAModuleVotes(nn.Module):
         )  # (B, mlp[-1], npoint, 1)
         new_features = new_features.squeeze(-1)  # (B, mlp[-1], npoint)
 
-        return new_xyz, new_features, inds, mode_pose
+        return new_xyz, new_features, inds
 
 
 class KPModuleVotes(nn.Module):

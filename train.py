@@ -155,7 +155,6 @@ net = Detector(num_class=DATASET_CONFIG.num_class,
                input_feature_dim=num_input_channel,
                vote_factor=FLAGS.vote_factor,
                sampling=FLAGS.cluster_sampling,
-               n_rot=FLAGS.n_rot,
                FLAGS=FLAGS)
 
 if torch.cuda.device_count() > 1:
@@ -191,7 +190,7 @@ CONFIG_DICT = {'remove_empty_box': False, 'use_3d_nms': True,
 if CHECKPOINT_PATH is not None and os.path.isfile(CHECKPOINT_PATH):
     print('loading checkpoint from {}'.format(CHECKPOINT_PATH))
     checkpoint = torch.load(CHECKPOINT_PATH)
-    net.load_state_dict(checkpoint['model_state_dict'], strict=True)
+    net.load_state_dict(checkpoint['model_state_dict'], strict=False)
 
 
 # ------------------------------------------------------------------------- GLOBAL CONFIG END

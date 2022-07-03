@@ -17,34 +17,20 @@ sys.path.append(os.path.join(ROOT_DIR, 'utils'))
 from utils import pc_util
 from pointnet2_repo.pointnet2_modules import PointnetSAModuleVotes
 
-def decode_scores(net, end_points, num_class, num_heading_bin, num_size_cluster, mean_size_arr, mode_pose):
-    mode_rot_mat = pc_util.batch_rotz(mode_pose)  # [B, Np, 3, 3]
+def decode_scores(net, end_points, num_class, num_heading_bin, num_size_cluster, mean_size_arr):
     net_transposed = net.transpose(2,1) # (batch_size, 1024, 2+3+num_heading_bin*2+num_size_cluster*4)
     batch_size = net_transposed.shape[0]
     num_proposal = net_transposed.shape[1]
 
     objectness_scores = net_transposed[:,:,0:2]
     end_points['objectness_scores'] = objectness_scores
-    
+
     base_xyz = end_points['aggregated_vote_xyz'] # (batch_size, num_proposal, 3)
-    local_xyz_cano = net_transposed[:,:,2:5, None]
-    local_xyz_world = torch.matmul(mode_rot_mat, local_xyz_cano).squeeze(-1)
-    center = base_xyz + local_xyz_world # (batch_size, num_proposal, 3)
+    center = base_xyz + net_transposed[:,:,2:5] # (batch_size, num_proposal, 3)
     end_points['center'] = center
 
-    n_rot = num_heading_bin
-    assert n_rot == num_heading_bin, 'our shifting algorithm assumes n_rot == n_heading_bin, but now n_rot=={}, n_heading_bin=={}'.format(n_rot, num_heading_bin)
-    mode_pose_label, _ = pc_util.angle2class(mode_pose, n_rot)
-    mode_pose_shift = mode_pose_label  # [B, Np]
-    shifting = torch.arange(num_heading_bin)[None, None].to(mode_pose_shift.device)
-    shifting = shifting.long() - mode_pose_shift[..., None].long()  # [B, Np, 24]
-    shifting = shifting % num_heading_bin
-
     heading_scores = net_transposed[:,:,5:5+num_heading_bin]
-    heading_scores = heading_scores.gather(2, shifting)
-
     heading_residuals_normalized = net_transposed[:,:,5+num_heading_bin:5+num_heading_bin*2]
-    heading_residuals_normalized = heading_residuals_normalized.gather(2, shifting)
     end_points['heading_scores'] = heading_scores # Bxnum_proposalxnum_heading_bin
     end_points['heading_residuals_normalized'] = heading_residuals_normalized # Bxnum_proposalxnum_heading_bin (should be -1 to 1)
     end_points['heading_residuals'] = heading_residuals_normalized * (np.pi/num_heading_bin) # Bxnum_proposalxnum_heading_bin
@@ -100,15 +86,9 @@ class ProposalModule(nn.Module):
         Returns:
             scores: (B,num_proposal,2+3+NH*2+NS*4) 
         """
-        seed_pose = end_points['point_pose_pred_angle']  # [B, N], already zeroed all bg points
-        seed_mask = end_points['seed_mask_pred']  # [B, N]
 
-        """you need seed_pose to 
-        (1) back-rotate xyz to "canonical space" as pointnet input
-        (2) rotate predicted bbox to world space"""
         # Farthest point sampling (FPS) on votes
-        seed_pose_ = seed_pose
-        xyz, features, fps_inds, mode_pose = self.vote_aggregation(xyz, features, seed_pose_, seed_mask)
+        xyz, features, fps_inds = self.vote_aggregation(xyz, features)
         sample_inds = fps_inds
         end_points['aggregated_vote_xyz'] = xyz # (batch_size, num_proposal, 3)
         end_points['aggregated_vote_inds'] = sample_inds # (batch_size, num_proposal,) # should be 0,1,2,...,num_proposal
@@ -119,7 +99,7 @@ class ProposalModule(nn.Module):
         net = self.conv3(net) # (batch_size, 2+3+num_heading_bin*2+num_size_cluster*4, num_proposal)
 
         end_points = decode_scores(net, end_points, self.num_class, self.num_heading_bin, self.num_size_cluster,
-                                   self.mean_size_arr, mode_pose)
+                                   self.mean_size_arr)
         return end_points
 
 if __name__=='__main__':

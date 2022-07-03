@@ -300,16 +300,6 @@ def get_loss(end_points, config, FLAGS=None):
         loss: pytorch scalar tensor
         end_points: dict
     """
-    seed_inds = end_points['seed_inds']  # [B, Np]
-    seed_rot_gt_label = end_points['pose_label'].gather(1, seed_inds.long())  # [B, Np]
-    seed_gt_mask = end_points['point_mask'].gather(1, seed_inds.long())  # [B, Np]
-    seed_cls_gt_label = end_points['point_cls_label'].gather(1, seed_inds)
-    seed_sym_label = end_points['sym_label'].gather(1, seed_inds)
-    end_points['seed_pose_gt_label'] = seed_rot_gt_label
-    end_points['seed_gt_mask'] = seed_gt_mask
-    end_points['seed_cls_gt_label'] = seed_cls_gt_label
-    end_points['seed_sym_label'] = seed_sym_label
-
     # Vote loss
     vote_loss = compute_vote_loss(end_points)
     end_points['vote_loss'] = vote_loss
@@ -338,28 +328,9 @@ def get_loss(end_points, config, FLAGS=None):
     end_points['sem_cls_loss'] = sem_cls_loss
     box_loss = center_loss + 0.1*heading_cls_loss + heading_reg_loss + 0.1*size_cls_loss + size_reg_loss
     end_points['box_loss'] = box_loss
-    end_points, point_pose_loss, point_cls_loss, pose_acc_all = compute_point_pose_loss(end_points)
-
-    seed_gt_mask = end_points['seed_gt_mask']
-    end_points, seed_mask_loss = compute_point_mask_loss(end_points, end_points['seed_mask_logits'], seed_gt_mask)
-    end_points['seed_mask_loss'] = seed_mask_loss
-    seed_mask_acc_all = seed_gt_mask == end_points['seed_mask_pred']
-    end_points['seed_mask_acc'] = seed_mask_acc_all.float().mean()
-    end_points['seed_mask_fg_acc'] = seed_mask_acc_all[seed_gt_mask].float().mean()
-    end_points['seed_mask_bg_acc'] = seed_mask_acc_all[~ seed_gt_mask].float().mean()
-    tp_fg = (seed_gt_mask & end_points['seed_mask_pred']).float().mean()
-    fp_fg = ((~ seed_gt_mask) & end_points['seed_mask_pred']).float().mean()
-    fn_fg = (seed_gt_mask & (~ end_points['seed_mask_pred'])).float().mean()
-    iou_fg = tp_fg / (tp_fg + fp_fg + fn_fg)
-    tp_bg = ((~ seed_gt_mask) & (~ end_points['seed_mask_pred'])).float().mean()
-    fp_bg = (seed_gt_mask & (~ end_points['seed_mask_pred'])).float().mean()
-    fn_bg = ((~ seed_gt_mask) & end_points['seed_mask_pred']).float().mean()
-    iou_bg = tp_bg / (tp_bg + fp_bg + fn_bg)
-    end_points['seed_fg_iou_acc'] = iou_fg
-    end_points['seed_bg_iou_acc'] = iou_bg
 
     # Final loss function
-    loss = vote_loss + 0.5*objectness_loss + box_loss + 0.1*sem_cls_loss + 0.1*(point_cls_loss + point_pose_loss) + 0.1* seed_mask_loss
+    loss = vote_loss + 0.5*objectness_loss + box_loss + 0.1*sem_cls_loss
     loss *= 10
     end_points['loss'] = loss
 

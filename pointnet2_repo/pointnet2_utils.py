@@ -33,7 +33,7 @@ class QueryAndGroupPN(nn.Module):
         super(QueryAndGroupPN, self).__init__()
         self.radius, self.nsample, self.use_xyz = radius, nsample, use_xyz
 
-    def forward(self, xyz, new_xyz, features, point_pose, point_pose_mask):
+    def forward(self, xyz, new_xyz, features):
         r"""
         Parameters
         ----------
@@ -43,9 +43,6 @@ class QueryAndGroupPN(nn.Module):
             centriods (B, npoint, 3), in world
         features : torch.Tensor
             Descriptors of the features (B, C, N), in canonical
-        point_pose: [B, N]
-            used to back-rotate xyz to canonical space when it is attached to features
-        point_pose_mask: [B, N], where 1 means FG, 0 means BG
 
         Returns
         -------
@@ -63,34 +60,11 @@ class QueryAndGroupPN(nn.Module):
 
         xyz_feature = grouped_xyz / self.radius
 
-        B, Np, Nnb = idx.shape
-        bq_filler = idx == idx[:, :, 0:1]  # [B, Np, Nnb]
-        bq_filler[:, :, 0] = False  # the first point is valid
-        cluster_poses = point_pose.gather(1, idx.flatten(1)).view([B, Np, Nnb])
-        cluster_pose_masks = point_pose_mask.gather(1, idx.flatten(1)).view([B, Np, Nnb])
-
-        """
-        Shadow all bg pts and ball-query-filler pts by random values.
-        In this case, if the mode pose is still a bg pt, then this cluster has no more than 2 consistent fg pts,
-        which means it is probably not a useful cluster, so we set its pose to 0.
-        """
-        cluster_poses[~ cluster_pose_masks] = 7 + torch.rand_like(cluster_poses[~ cluster_pose_masks])  # shadow bg pts
-        cluster_poses[bq_filler] = 11 + torch.rand_like(cluster_poses[bq_filler])  # shadow filler pts
-        cluster_pose_masks[bq_filler] = False  # filler should not be seen as fg in any case
-        mode_pose, mode_position = cluster_poses.mode(dim=-1)  # [B, Np], [B, Np]
-        mode_pose_is_fg_pt = cluster_pose_masks.gather(2, mode_position[..., None]).squeeze(-1)  # [B, Np]
-        mode_pose_is_bg_pt = ~ mode_pose_is_fg_pt
-        mode_pose[mode_pose_is_bg_pt] = 0
-
-        back_rot_mat = pc_util.batch_rotz(- mode_pose[..., None])  # [B, Np, Nnb, 3, 3]
-        xyz_feature = xyz_feature.permute([0, 2, 3, 1])[..., None]
-        back_rot_xyz = torch.matmul(back_rot_mat, xyz_feature).squeeze(-1).permute([0, 3, 1, 2])
-
         new_features = torch.cat(
-            [back_rot_xyz, grouped_features], dim=1  # the filter need not to know abs pts scale because that info has been provided by its layer index
+            [xyz_feature, grouped_features], dim=1  # the filter need not to know abs pts scale because that info has been provided by its layer index
         )  # (B, C + 3, npoint, nsample)
 
-        return new_features, mode_pose
+        return new_features
 
 
 class QueryAndGroupKP(nn.Module):

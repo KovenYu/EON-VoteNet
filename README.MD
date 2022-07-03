@@ -38,11 +38,11 @@ Training assumes one GPU.
 It should take a few hours using the default setup.
 ```
 cd EON-VoteNet
-CUDA_VISIBLE_DEVICES=0 python train.py
+python train.py
 ```
 
 ## Evaluation
-After training or [downloading a checkpoint](https://drive.google.com/file/d/1d2k478v9UFkI_UwVbZ1345z46ddnrUMe/view?usp=sharing),
+After training or [downloading a checkpoint](https://drive.google.com/drive/folders/1dlEU9TBVuMPHhzHYJM8GEF31-Aj1eiZm?usp=sharing),
 evaluation can be done by:
 ```
 python train.py --is_eval --checkpoint_path [checkpoint_file_path]

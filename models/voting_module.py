@@ -41,20 +41,16 @@ class VotingModule(nn.Module):
         self.bn1 = torch.nn.BatchNorm1d(self.in_dim)
         self.bn2 = torch.nn.BatchNorm1d(self.in_dim)
         
-    def forward(self, seed_xyz, seed_features, rot_radian=None):
+    def forward(self, seed_xyz, seed_features):
         """ Forward pass.
 
         Arguments:
             seed_xyz: (batch_size, num_seed, 3) Pytorch tensor
             seed_features: (batch_size, feature_dim, num_seed) Pytorch tensor
-            rot_radian: if not None, should be [B, Np],
-            used for transforming residual xyz (cano space) to world space
         Returns:
             vote_xyz: (batch_size, num_seed*vote_factor, 3)
             vote_features: (batch_size, vote_feature_dim, num_seed*vote_factor)
         """
-        if rot_radian is not None:
-            rot_mat = batch_rotz(rot_radian)  # [B, Np, 3, 3]
 
         batch_size = seed_xyz.shape[0]
         num_seed = seed_xyz.shape[1]
@@ -65,10 +61,7 @@ class VotingModule(nn.Module):
                 
         net = net.transpose(2,1).view(batch_size, num_seed, self.vote_factor, 3+self.out_dim)
         offset = net[:,:,:,0:3]  # [B, Np, 1, 3]
-        if rot_radian is not None:
-            offset = offset.permute([0, 1, 3, 2])  # [B, Np, 3, 1]
-            offset_ = torch.matmul(rot_mat, offset).permute([0, 1, 3, 2])  # now in world space
-        vote_xyz = seed_xyz.unsqueeze(2) + offset_
+        vote_xyz = seed_xyz.unsqueeze(2) + offset
         vote_xyz = vote_xyz.contiguous().view(batch_size, num_vote, 3)
         
         residual_features = net[:,:,:,3:] # (batch_size, num_seed, vote_factor, out_dim)
